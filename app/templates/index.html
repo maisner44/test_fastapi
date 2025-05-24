@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Оцінка методів тестування</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Оцінка методів тестування</h1>
+        
+        <form method="post" action="/analyze">
+            <div class="criteria-container">
+                <h2>Введіть значення критеріїв:</h2>
+                {% for criterion in criteria_count %}
+                <div class="criterion">
+                    <label>Критерій {{ criterion }}:</label>
+                    <div class="values">
+                        {% for value in values_count %}
+                        <input type="number" step="any" 
+                               name="crit_{{ criterion-1 }}_val_{{ value-1 }}"
+                               placeholder="Значення {{ value }}" required>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            
+            <button type="submit">Оцінити методи</button>
+            
+            <div class="result-section">
+                <h2>Поточний результат:</h2>
+                <textarea id="analysisResult" rows="6" readonly>{{ result }}</textarea>
+            </div>
+        </form>
+        
+        <div class="history-section">
+            <h2>Історія обчислень</h2>
+            {% if history %}
+            <div class="history-list">
+                {% for record in history %}
+                <div class="history-item">
+                    <div class="history-header">
+                        <span class="history-date">{{ record.calculation_date.strftime('%Y-%m-%d %H:%M') }}</span>
+                        <button class="copy-btn" onclick="copyToClipboard('{{ record.summary }}')">Копіювати</button>
+                    </div>
+                    <div class="history-summary">{{ record.summary }}</div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p>Історія порожня</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Результат скопійовано!');
+            });
+        }
+    </script>
+</body>
+</html>
