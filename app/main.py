@@ -1,71 +1,37 @@
-from fastapi import FastAPI, Request, Form, Depends
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request, Form
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+import openpyxl
+from io import BytesIO
 from datetime import datetime
-import os
-
-# Налаштування бази даних
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
-# Модель для зберігання результатів
-class CalculationHistory(Base):
-    __tablename__ = "calculation_history"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    calculation_date = Column(DateTime, default=datetime.now)
-    input_data = Column(String)  # JSON-рядок з вхідними даними
-    results = Column(String)     # JSON-рядок з результатами
-    summary = Column(String)     # Текстовий підсумок
-
-# Створюємо таблиці
-Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
-# Методи тестування
 TEST_METHODS = ["Метод A", "Метод B", "Метод C"]
 CRITERIA_COUNT = 5
 VALUES_PER_CRITERION = 3
 
-# Залежність для отримання сесії БД
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+# Глобальна змінна для історії (у реальному додатку використовуйте БД)
+analysis_history = []
 
 @app.get("/", response_class=HTMLResponse)
-async def read_root(request: Request, db: Session = Depends(get_db)):
-    # Отримуємо історію з БД
-    history = db.query(CalculationHistory).order_by(CalculationHistory.calculation_date.desc()).all()
-    
+async def read_root(request: Request):
     return templates.TemplateResponse("index.html", {
         "request": request,
         "criteria_count": range(1, CRITERIA_COUNT + 1),
         "values_count": range(1, VALUES_PER_CRITERION + 1),
         "result": "",
-        "history": history
+        "history_count": len(analysis_history)
     })
 
 @app.post("/analyze", response_class=HTMLResponse)
-async def analyze_criteria(
-    request: Request,
-    db: Session = Depends(get_db)
-):
+async def analyze_criteria(request: Request):
     form_data = await request.form()
     
-    # Збираємо введені значення
     criteria_values = []
     for criterion_idx in range(CRITERIA_COUNT):
         values = []
@@ -78,7 +44,7 @@ async def analyze_criteria(
             values.append(value)
         criteria_values.append(values)
     
-    # Оцінюємо методи
+    # Логіка оцінки методів
     def evaluate_method(method_idx, criteria_values):
         total = 0
         for i, values in enumerate(criteria_values):
@@ -91,7 +57,6 @@ async def analyze_criteria(
                 total += avg * (2.0 if i == 4 else 0.5)
         return round(total, 2)
     
-    # Отримуємо результати
     results = []
     for method_idx, method_name in enumerate(TEST_METHODS):
         score = evaluate_method(method_idx, criteria_values)
@@ -99,28 +64,67 @@ async def analyze_criteria(
     
     results.sort(key=lambda x: x["score"], reverse=True)
     
-    # Формуємо текст результату
+    # Формуємо результат
     result_text = "Результати оцінки методів:\n\n"
     for res in results:
         result_text += f"{res['method']}: {res['score']} балів\n"
     
-    # Зберігаємо в історію
-    history_record = CalculationHistory(
-        input_data=str(criteria_values),
-        results=str(results),
-        summary=result_text
-    )
-    db.add(history_record)
-    db.commit()
-    db.refresh(history_record)
-    
-    # Отримуємо оновлену історію
-    history = db.query(CalculationHistory).order_by(CalculationHistory.calculation_date.desc()).all()
+    # Додаємо до історії
+    history_entry = {
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "criteria": criteria_values,
+        "results": results
+    }
+    analysis_history.append(history_entry)
     
     return templates.TemplateResponse("index.html", {
         "request": request,
         "criteria_count": range(1, CRITERIA_COUNT + 1),
         "values_count": range(1, VALUES_PER_CRITERION + 1),
         "result": result_text,
-        "history": history
+        "history_count": len(analysis_history)
     })
+
+@app.get("/export")
+async def export_to_excel():
+    if not analysis_history:
+        return {"message": "Історія порожня"}
+    
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Результати оцінки"
+    
+    # Заголовки
+    headers = ["Дата оцінки", "Метод тестування", "Бали"]
+    for crit in range(1, CRITERIA_COUNT + 1):
+        headers.append(f"Критерій {crit} (середнє)")
+    ws.append(headers)
+    
+    # Дані
+    for entry in analysis_history:
+        for result in entry["results"]:
+            row = [
+                entry["date"],
+                result["method"],
+                result["score"]
+            ]
+            # Додаємо середні значення критеріїв
+            for crit_values in entry["criteria"]:
+                row.append(round(sum(crit_values) / len(crit_values), 2))
+            ws.append(row)
+    
+    excel_file = BytesIO()
+    wb.save(excel_file)
+    excel_file.seek(0)
+    
+    headers = {
+        "Content-Disposition": "attachment; filename=analysis_history.xlsx",
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    }
+    return StreamingResponse(excel_file, headers=headers)
+
+@app.post("/clear_history")
+async def clear_history():
+    global analysis_history
+    analysis_history = []
+    return {"message": "Історія очищена", "count": 0}

@@ -5,12 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Оцінка методів тестування</title>
     <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
     <div class="container">
         <h1>Оцінка методів тестування</h1>
         
-        <form method="post" action="/analyze">
+        <form method="post" action="/analyze" id="analysisForm">
             <div class="criteria-container">
                 <h2>Введіть значення критеріїв:</h2>
                 {% for criterion in criteria_count %}
@@ -20,7 +21,7 @@
                         {% for value in values_count %}
                         <input type="number" step="any" 
                                name="crit_{{ criterion-1 }}_val_{{ value-1 }}"
-                               placeholder="Значення {{ value }}" required>
+                               placeholder="Значення {{ value }}">
                         {% endfor %}
                     </div>
                 </div>
@@ -30,37 +31,55 @@
             <button type="submit">Оцінити методи</button>
             
             <div class="result-section">
-                <h2>Поточний результат:</h2>
+                <h2>Результат:</h2>
                 <textarea id="analysisResult" rows="6" readonly>{{ result }}</textarea>
             </div>
         </form>
+
+    </div>
+
+    <div class="history-counter">
+        <span id="historyCount">{{ history_count }}</span> записів в історії
+    </div>
+    
+    <div class="container">
+        <!-- Інша частина форми залишається незмінною -->
         
         <div class="history-section">
             <h2>Історія обчислень</h2>
-            {% if history %}
-            <div class="history-list">
-                {% for record in history %}
-                <div class="history-item">
-                    <div class="history-header">
-                        <span class="history-date">{{ record.calculation_date.strftime('%Y-%m-%d %H:%M') }}</span>
-                        <button class="copy-btn" onclick="copyToClipboard('{{ record.summary }}')">Копіювати</button>
-                    </div>
-                    <div class="history-summary">{{ record.summary }}</div>
-                </div>
-                {% endfor %}
-            </div>
-            {% else %}
-            <p>Історія порожня</p>
-            {% endif %}
+            <button id="exportBtn">Експорт в Excel</button>
+            <button id="clearHistoryBtn">Очистити історію</button>
         </div>
     </div>
 
     <script>
-        function copyToClipboard(text) {
-            navigator.clipboard.writeText(text).then(() => {
-                alert('Результат скопійовано!');
-            });
+        // Оновлення лічильника
+        function updateHistoryCounter(count) {
+            document.getElementById('historyCount').textContent = count;
         }
+
+        // Очищення історії
+        document.getElementById('clearHistoryBtn').addEventListener('click', async function() {
+            try {
+                const response = await fetch('/clear_history', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                updateHistoryCounter(data.count);
+                alert('Історія очищена!');
+            } catch (error) {
+                console.error('Помилка очищення історії:', error);
+                alert('Помилка очищення історії');
+            }
+        });
+
+        // Експорт в Excel
+        document.getElementById('exportBtn').addEventListener('click', function() {
+            window.location.href = '/export';
+        });
+
+        // Ініціалізація лічильника
+        updateHistoryCounter({{ history_count }});
     </script>
 </body>
 </html>
