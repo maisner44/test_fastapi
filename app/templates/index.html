@@ -5,23 +5,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Оцінка методів тестування</title>
     <link rel="stylesheet" href="/static/styles.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
+    <div class="history-counter">
+        <span id="historyCount">{{ history_count }}</span> записів в історії
+    </div>
+    
     <div class="container">
         <h1>Оцінка методів тестування</h1>
         
-        <form method="post" action="/analyze" id="analysisForm">
+        <form method="post" action="/analyze">
             <div class="criteria-container">
-                <h2>Введіть значення критеріїв:</h2>
-                {% for criterion in criteria_count %}
+                {% for criterion_idx in criteria_count %}
                 <div class="criterion">
-                    <label>Критерій {{ criterion }}:</label>
+                    <h3>{{ criteria_names[criterion_idx] }}</h3>
                     <div class="values">
-                        {% for value in values_count %}
-                        <input type="number" step="any" 
-                               name="crit_{{ criterion-1 }}_val_{{ value-1 }}"
-                               placeholder="Значення {{ value }}">
+                        {% for value_idx in values_count %}
+                        <div class="value-input">
+                            <label>{{ test_methods[value_idx] }}:</label>
+                            <input type="number" step="any" 
+                                   name="crit_{{ criterion_idx }}_val_{{ value_idx }}"
+                                   value="{{ form_data['crit_' ~ criterion_idx ~ '_val_' ~ value_idx] }}"
+                                   required>
+                        </div>
                         {% endfor %}
                     </div>
                 </div>
@@ -36,15 +42,6 @@
             </div>
         </form>
 
-    </div>
-
-    <div class="history-counter">
-        <span id="historyCount">{{ history_count }}</span> записів в історії
-    </div>
-    
-    <div class="container">
-        <!-- Інша частина форми залишається незмінною -->
-        
         <div class="history-section">
             <h2>Історія обчислень</h2>
             <button id="exportBtn">Експорт в Excel</button>
